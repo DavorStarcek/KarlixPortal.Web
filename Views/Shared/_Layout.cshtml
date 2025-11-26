@@ -1,0 +1,155 @@
+﻿@using Microsoft.AspNetCore.Http
+@using System.Linq
+@inject IHttpContextAccessor HttpCtx
+
+<!DOCTYPE html>
+<html lang="hr">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - Karlix Portal</title>
+
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/KarlixPortal.Web.styles.css" asp-append-version="true" />
+</head>
+<body>
+    <header>
+        <nav class="navbar navbar-expand-sm navbar-light bg-white border-bottom box-shadow mb-3">
+            <div class="container-fluid">
+                <a class="navbar-brand fw-semibold" asp-area="" asp-controller="Home" asp-action="Index">
+                    Karlix Portal
+                </a>
+
+                <button class="navbar-toggler" type="button" data-bs-toggle="collapse"
+                        data-bs-target="#topNav" aria-controls="topNav" aria-expanded="false"
+                        aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+
+                <div id="topNav" class="collapse navbar-collapse d-sm-inline-flex justify-content-between">
+                    <ul class="navbar-nav me-auto">
+                        <li class="nav-item">
+                            <a class="nav-link text-dark" asp-controller="Home" asp-action="Index">Home</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link text-dark" asp-controller="Home" asp-action="Privacy">Privacy</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link text-dark" asp-controller="Home" asp-action="Secure">Secure (test)</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link text-dark" asp-controller="Profile" asp-action="Index">Moj profil</a>
+                        </li>
+                        @if (User?.Identity?.IsAuthenticated ?? false)
+                        {
+                            <li class="nav-item">
+                                <a class="nav-link text-dark" asp-controller="Sso" asp-action="Index">SSO Apps</a>
+                            </li>
+                        }
+
+                    </ul>
+
+                    @{
+                        // Pokušavamo pronaći tenant GUID + naziv
+                        var tenantGuidRaw =
+                        User?.Claims?.FirstOrDefault(c => c.Type == "tenant")?.Value ??
+                        User?.Claims?.FirstOrDefault(c => c.Type == "tenant_id")?.Value;
+
+                        var tenantName =
+                        User?.Claims?.FirstOrDefault(c => c.Type == "tenant_name")?.Value ??
+                        User?.Claims?.FirstOrDefault(c => c.Type == "tenant:name")?.Value;
+
+                        string? tenantDisplay = null;
+
+                        if (!string.IsNullOrWhiteSpace(tenantName))
+                        {
+                            tenantDisplay = tenantName;
+                        }
+                        else if (!string.IsNullOrWhiteSpace(tenantGuidRaw))
+                        {
+                            if (Guid.TryParse(tenantGuidRaw, out var tenantGuid) && tenantGuid == Guid.Empty)
+                            {
+                                tenantDisplay = "Global";
+                            }
+                            else
+                            {
+                                tenantDisplay = tenantGuidRaw; // fallback – prikaz GUID-a
+                            }
+                        }
+                    }
+
+                    <ul class="navbar-nav">
+                        @if (User?.Identity?.IsAuthenticated ?? false)
+                        {
+                            @* Prikaz tenanta ako postoji *@
+                            @if (!string.IsNullOrEmpty(tenantDisplay))
+                            {
+                                <li class="nav-item d-flex align-items-center me-3">
+                                    <span class="text-muted small">
+                                        🏷 Tenant: <strong>@tenantDisplay</strong>
+                                    </span>
+                                </li>
+                            }
+
+                            <li class="nav-item d-flex align-items-center me-2">
+                                <span class="text-muted small">
+                                    @("👤 " + (User.Identity?.Name ?? "Korisnik"))
+                                </span>
+                            </li>
+
+                            <li class="nav-item">
+                                <!-- Lokalna odjava: briše samo portal cookie -->
+                                <a class="btn btn-sm btn-outline-secondary"
+                                   asp-controller="Account"
+                                   asp-action="Logout">
+                                    Odjava
+                                </a>
+                            </li>
+
+                            <li class="nav-item ms-2">
+                                <!-- Globalna odjava: portal + KarlixID (SSO end-session) -->
+                                <a class="btn btn-sm btn-outline-danger"
+                                   asp-controller="Account"
+                                   asp-action="Logout"
+                                   asp-route-global="true">
+                                    Globalna odjava (SSO)
+                                </a>
+                            </li>
+                        }
+                        else
+                        {
+                            <li class="nav-item">
+                                <!-- Prijava: OIDC challenge u AuthController.Login -->
+                                <a class="btn btn-sm btn-primary"
+                                   asp-controller="Auth"
+                                   asp-action="Login">
+                                    Prijava
+                                </a>
+                            </li>
+                        }
+                    </ul>
+                </div>
+            </div>
+        </nav>
+    </header>
+
+    <div class="container">
+        <main role="main" class="pb-3">
+            @RenderBody()
+        </main>
+    </div>
+
+    <footer class="border-top footer text-muted">
+        <div class="container">
+            &copy; @DateTime.Now.Year - Karlix Portal -
+            <a asp-controller="Home" asp-action="Privacy">Privacy</a>
+        </div>
+    </footer>
+
+    <script src="~/lib/jquery/dist/jquery.min.js"></script>
+    <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="~/js/site.js" asp-append-version="true"></script>
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>
