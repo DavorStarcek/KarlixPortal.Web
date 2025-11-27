@@ -3,6 +3,14 @@ using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 
 var builder = WebApplication.CreateBuilder(args);
+var env = builder.Environment;
+var isDev = env.IsDevelopment();
+
+// flag za detaljne greške (isti princip kao u KarlixID)
+var detailedErrorsEnv = Environment.GetEnvironmentVariable("ASPNETCORE_DETAILEDERRORS");
+var showDevErrors =
+    isDev ||
+    string.Equals(detailedErrorsEnv, "true", StringComparison.OrdinalIgnoreCase);
 
 // ===== MVC =====
 builder.Services.AddControllersWithViews();
@@ -10,13 +18,15 @@ builder.Services.AddControllersWithViews();
 // ===== HttpContextAccessor (za kasnije ako zatreba) =====
 builder.Services.AddHttpContextAccessor();
 
-// ===== Čitanje OIDC postavki iz appsettings.json =====
+// ===== Čitanje OIDC postavki iz appsettings.{Environment}.json =====
 var authSection = builder.Configuration.GetSection("Authentication");
 
+// Defaulti za slučaj da nešto fali u configu (korisno za DEV)
 var authority = authSection["Authority"] ?? "https://localhost:7173";
 var clientId = authSection["ClientId"] ?? "karlix_mvc";
 var clientSecret = authSection["ClientSecret"] ?? "super-tajna-rijec-za-dev";
-var scopesString = authSection["Scopes"] ?? "openid profile email";
+// Portal *stvarno* koristi ove scope-ove, pa ih i defaultiramo:
+var scopesString = authSection["Scopes"] ?? "openid profile email roles offline_access";
 
 // ===== Authentication + OIDC =====
 builder.Services
@@ -32,16 +42,15 @@ builder.Services
     .AddOpenIdConnect(OpenIdConnectDefaults.AuthenticationScheme, options =>
     {
         // KarlixID kao authority
-        options.Authority = authority.TrimEnd('/'); // npr. https://localhost:7173
+        options.Authority = authority.TrimEnd('/'); // npr. https://localhost:7173 ili https://id.karlix.eu
 
         options.ClientId = clientId;
         options.ClientSecret = clientSecret;
 
-        // Koristimo authorization_code + PKCE
+        // authorization_code + PKCE
         options.ResponseType = OpenIdConnectResponseType.Code;
         options.UsePkce = true;
 
-        // Read metadata (.well-known/openid-configuration)
         options.RequireHttpsMetadata = true;
         options.SaveTokens = true;
 
@@ -57,11 +66,11 @@ builder.Services
         options.TokenValidationParameters.NameClaimType = "name";
         options.TokenValidationParameters.RoleClaimType = "role";
 
-        // Callback / signout rute – OIDC handler generira /signin-oidc i /signout-callback-oidc
+        // Callback / signout rute
         options.CallbackPath = "/signin-oidc";
         options.SignedOutCallbackPath = "/signout-callback-oidc";
 
-        // Po želji: malo logiranja
+        // Logiranje grešaka pri OIDC flowu
         options.Events = new OpenIdConnectEvents
         {
             OnAuthenticationFailed = ctx =>
@@ -76,7 +85,12 @@ builder.Services
 var app = builder.Build();
 
 // ===== Pipeline =====
-if (!app.Environment.IsDevelopment())
+if (showDevErrors)
+{
+    // Development ili ASPNETCORE_DETAILEDERRORS=true → full stack
+    app.UseDeveloperExceptionPage();
+}
+else
 {
     app.UseExceptionHandler("/Home/Error");
     app.UseHsts();
